@@ -17,36 +17,43 @@ export class AuthService {
   ) {}
 
   async signUp(signUpDto: SignUpDto) {
-    const { email, name, password } = signUpDto;
-    const findUser = await this.usersService.findOne(email);
+    const { email, password, nickname } = signUpDto;
+    const user = await this.usersService.findByEmail(email);
 
-    if (findUser) throw new ConflictException('이미 존재하는 이메일입니다.');
+    if (user) throw new ConflictException('이미 존재하는 이메일입니다.');
+
     const hash = await this.passwordService.hash(password);
 
-    return await this.usersService.create(email, hash, name);
+    return await this.usersService.create({
+      email,
+      password: hash,
+      nickname,
+    });
   }
 
-  async signIn(user: User) {
+  async getTokens(user: User) {
     const accessTokenPayload = {
       sub: user.id,
-      name: user.name,
+      nickname: user.nickname,
       email: user.email,
     };
-    const refreshTokenPayload = { email: user.email };
+    const refreshTokenPayload = { email: user.email, sub: user.id };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.createJwtToken(accessTokenPayload),
       this.createRefreshToken(refreshTokenPayload),
     ]);
 
-    const hashRefreshToken = await this.passwordService.hash(refreshToken);
-
-    await this.usersService.saveRefreshToken(user.email, hashRefreshToken);
-    return { user, accessToken, refreshToken };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { createdAt, role, updatedAt, ...result } = user;
+    const responseUser = {
+      ...result,
+    };
+    return { user: responseUser, accessToken, refreshToken };
   }
 
   async validateUser(email: string, password: string) {
-    const user = await this.usersService.findOne(email);
+    const user = await this.usersService.findByEmail(email);
     if (user && (await this.passwordService.compare(user.password, password))) {
       //eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...result } = user;
@@ -60,12 +67,19 @@ export class AuthService {
     return this.jwtService.signAsync(payload);
   }
 
-  async createRefreshToken(payload: { email: string }) {
+  async createRefreshToken(payload: { email: string; sub: string }) {
     const secret = this.configService.get<string>(CONFIG_KEY.refreshTokenKey);
     const expiresIn = this.configService.get<string>(
       CONFIG_KEY.refreshExpirationKey,
     );
 
-    return this.jwtService.signAsync(payload, { secret, expiresIn });
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      secret,
+      expiresIn,
+    });
+
+    await this.usersService.saveRefreshToken(payload.sub, refreshToken);
+
+    return refreshToken;
   }
 }

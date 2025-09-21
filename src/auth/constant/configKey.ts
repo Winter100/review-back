@@ -3,4 +3,6 @@ export const CONFIG_KEY = {
   accessExpirationKey: 'JWT_ACCESS_EXPIRATION',
   refreshTokenKey: 'JWT_REFRESH_SECRET',
   refreshExpirationKey: 'JWT_REFRESH_EXPIRATION',
+  supabaseUrl: 'SUPABASE_URL',
+  supabaseKey: 'SUPABASE_KEY',
 };

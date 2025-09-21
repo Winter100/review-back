@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export const SIGNUP_SUCCESS = {
   message: '회원가입 성공',
-  status: HttpStatus.CREATED,
+  statusCode: HttpStatus.CREATED,
 };
 
 export class SignUpSuccessResponseDto {
@@ -15,7 +15,7 @@ export class SignUpSuccessResponseDto {
 
   @ApiProperty({
     type: Number,
-    example: SIGNUP_SUCCESS.status,
+    example: SIGNUP_SUCCESS.statusCode,
   })
-  status: number;
+  statusCode: number;
 }
