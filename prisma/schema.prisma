@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+model User {
+  // ---기본 데이터---
+  id String @id @default(uuid())
+  email String @unique
+  nickname String
+  password String
+  profileImageUrl String?
+  introduction String?
+
+  // ---리프레쉬 토큰---
+  
+  refreshToken RefreshToken?
+
+  // ---메타 데이터---
+  role Role @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- ---
+  reviews Review[]
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model RefreshToken {
+  id String @id @default(cuid())
+  token String @unique
+
+  // --- 날짜 관련---
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  // ------
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refreshTokens")
+}
+
+model Review {
+  // ---필드---
+  id String @id @default(uuid())
+  title String
+  content String
+  mainImgaeUrl String
+  rating Int
+  location String?
+  price String?
+
+  categoryId Int
+  category Category @relation(fields: [categoryId], references: [id])
+
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime?
+
+  // ---관계---
+  tags Tag[]
+  images ReviewImage[]
+
+  @@map("reviews")
+}
+
+model ReviewImage {
+  id Int @id @default(autoincrement())
+  imageUrl String
+  isMain Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  reviewId String
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@map("review_images")
+}
+
+
+model Tag {
+  id Int @id @default(autoincrement())
+  tag String
+
+  reviewId String
+  reviews Review @relation(fields: [reviewId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("reviews_tags")
+}
+
+model Category {
+  id Int @id @default(autoincrement())
+  name CategoryType @unique
+
+  reviews Review[]
+
+  @@map("categories")
+}
+
+enum CategoryType {
+  // 추후 카테고리 추가하기
+  FOOD
+  ETC
+}
