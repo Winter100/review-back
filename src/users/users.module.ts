@@ -4,13 +4,12 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { UserRepository } from 'src/users/repositories/user.repository';
 import { SupabaseModule } from 'src/supabase/supabase.module';
 import { UsersController } from './users.controller';
-import { JwtService } from '@nestjs/jwt';
-import { PasswordService } from 'src/auth/password.service';
+import { ReviewModule } from 'src/review/review.module';
 
 @Module({
-  imports: [PrismaModule, SupabaseModule],
+  imports: [PrismaModule, SupabaseModule, ReviewModule],
   controllers: [UsersController],
-  providers: [UsersService, UserRepository, JwtService, PasswordService],
+  providers: [UsersService, UserRepository],
   exports: [UsersService],
 })
 export class UsersModule {}
