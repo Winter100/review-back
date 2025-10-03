@@ -81,7 +81,7 @@ model Review {
 
 model ReviewImage {
   id Int @id @default(autoincrement())
-  imageUrl String
+  key String @unique
   isMain Boolean @default(false)
   createdAt DateTime @default(now())
 
@@ -94,10 +94,10 @@ model ReviewImage {
 
 model Tag {
   id Int @id @default(autoincrement())
-  tag String
+  name String
 
   reviewId String
-  reviews Review @relation(fields: [reviewId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@map("reviews_tags")
 }
@@ -105,8 +105,10 @@ model Tag {
 model Category {
   id Int @id @default(autoincrement())
   name CategoryType @unique
+  title String
+  description String
 
-  reviews Review[]
+  review Review[]
 
   @@map("categories")
 }
@@ -114,5 +116,8 @@ model Category {
 enum CategoryType {
   // 추후 카테고리 추가하기
   FOOD
+  SHOPPING
+  CAFE
+  TRAVEL
   ETC
 }
