@@ -4,6 +4,10 @@ import { IsOptional, IsString, IsNumber, IsArray } from 'class-validator';
 
 export class QueryReviewDto {
   @IsOptional()
+  @IsString()
+  q?: string;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   @Transform(({ value }: { value: string }) => {

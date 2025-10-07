@@ -1,36 +1,43 @@
+import { PrismaService } from 'src/prisma/prisma.service';
+import { UpdateReviewDto } from './dto/update-review.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ImageService } from './../supabase/image.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { ProcessedFile } from './types/image-type';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ReviewRepository } from './repositories/review.repository';
 import { UserPayload } from 'src/auth/types/payload';
 import { QueryReviewDto } from './dto/query-review.dto';
-import { CategoryType, Prisma } from '@prisma/client';
-import { reviewWithDetailsInclude } from './types/review-repository-type';
+import { CategoryType } from '@prisma/client';
 
 @Injectable()
 export class ReviewService {
   constructor(
     private readonly imageService: ImageService,
     private readonly reviewRepository: ReviewRepository,
+    private readonly prismaService: PrismaService,
   ) {}
 
-  // 리뷰 생성
-  async createReview(
-    user: UserPayload,
-    createReviewDto: CreateReviewDto,
-    files: Express.Multer.File[],
-  ) {
-    let imgaeUrls: string[] = [];
+  /* 리뷰 생성 */
+  async createReview(user: UserPayload, createReviewDto: CreateReviewDto) {
+    const categoryData = await this.reviewRepository.findCategoryData(
+      createReviewDto.category,
+    );
 
-    if (files && files.length > 0) {
-      imgaeUrls = await this.isImageSave(files);
-    }
+    if (!categoryData) throw new BadRequestException('Invalid category');
 
-    return await this.reviewRepository.create(user, createReviewDto, imgaeUrls);
+    return await this.reviewRepository.create(
+      user,
+      categoryData.id,
+      createReviewDto,
+    );
   }
 
-  // 리뷰 상세
+  /* 리뷰 상세 정보 */
   async findById(id: string) {
     const review = await this.reviewRepository.findById(id);
 
@@ -39,38 +46,10 @@ export class ReviewService {
     return review;
   }
 
+  /* 카테고리에 따른 리뷰 찾기 (무한스크롤) */
   async findByCategory(query: QueryReviewDto) {
-    const { cursor, limit, rating, category, page } = query;
-
-    const where: Prisma.ReviewWhereInput = {};
-
-    if (category) {
-      where.category = { name: { in: category as CategoryType[] } };
-    }
-
-    if (rating) {
-      where.rating = {
-        gte: rating,
-      };
-    }
-
-    const queryOptions: Prisma.ReviewFindManyArgs = {
-      where,
-      include: reviewWithDetailsInclude,
-      omit: {
-        authorId: true,
-        categoryId: true,
-      },
-      take: limit + 1,
-      orderBy: { createdAt: 'desc' },
-    };
-
-    if (cursor) {
-      queryOptions.skip = 1;
-      queryOptions.cursor = { id: cursor };
-    }
-
-    const reviews = await this.reviewRepository.findByCategory(queryOptions);
+    const { limit } = query;
+    const reviews = await this.reviewRepository.findByCategory(query);
     const hasNextPage = reviews.length > limit;
     const dataToSend = hasNextPage ? reviews.slice(0, limit) : reviews;
     const nextCursor =
@@ -84,22 +63,79 @@ export class ReviewService {
       },
     };
   }
-  async findAll() {}
-  async update() {}
 
-  async delete(id: string) {
-    // 저장된 리뷰의 authId와 jwt의 id비교 하기
-    return await this.reviewRepository.delete(id);
+  /* 리뷰 업데이트 */
+  async update(
+    user: UserPayload,
+    reviewId: string,
+    updateReviewDto: UpdateReviewDto,
+  ) {
+    /* 작성자 권한 확인 */
+    await this.isReviewAuthor(reviewId, user.id);
+
+    const { category } = updateReviewDto;
+    if (!category) throw new BadRequestException();
+
+    /* 카테고리 값 확인 */
+    const categoryData = await this.reviewRepository.findCategoryData(category);
+    if (!categoryData) throw new BadRequestException('Invalid category');
+
+    /* 레포지토리를 통한 업데이트 */
+    return await this.reviewRepository.update(
+      reviewId,
+      categoryData.id,
+      updateReviewDto,
+    );
   }
 
-  private async isImageSave(files: Express.Multer.File[]) {
-    const processedFiles: ProcessedFile[] =
-      await this.imageService.processMultipleFile(files);
+  /* 리뷰 삭제 */
+  async delete(reviewId: string, user: UserPayload) {
+    const review = await this.isReviewAuthor(reviewId, user.id);
 
-    const uploadPromises = processedFiles.map((file) =>
-      this.imageService.uploadFile(file, 'reviews'),
-    );
+    try {
+      await this.prismaService.$transaction([
+        this.prismaService.review.delete({ where: { id: reviewId } }),
+      ]);
 
-    return await Promise.all(uploadPromises);
+      if (review.images.length >= 1) {
+        const imageKeys = review.images.map((image) => image.key);
+        await this.imageService.deleteImage(imageKeys);
+      }
+
+      return { message: `${reviewId}가 삭제가 완료되었습니다` };
+    } catch {
+      throw new InternalServerErrorException();
+    }
+  }
+
+  /* 카테고리 별 총 리뷰 갯수 */
+  async countReviewByCategory() {
+    return await this.reviewRepository.findCategoryCount();
+  }
+
+  /* 유저가 작성한 리뷰를 카테고리별로 집계 */
+  async countReviewByUserCategory(userId: string): Promise<
+    Array<{
+      categoryId: number;
+      categoryName: CategoryType;
+      categoryTitle: string;
+      categoryDescription: string;
+      count: number;
+    }>
+  > {
+    return await this.reviewRepository.countUserReviewsByCategory(userId);
+  }
+
+  /* 유저가 작성한 총 리뷰 갯수 */
+  async countReviewByUserId(userId: string) {
+    return await this.reviewRepository.countReviewByUserId(userId);
+  }
+
+  /* 리뷰 아이디로 리뷰 검색 -> 작성자 이이디와 요청 아이디 비교 */
+  private async isReviewAuthor(reviewId: string, id: string) {
+    const review = await this.findById(reviewId);
+    const isAuthor = review.author.id === id;
+    if (!isAuthor) throw new ForbiddenException('권한이 없습니다.');
+    return review;
   }
 }
