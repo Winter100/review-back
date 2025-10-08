@@ -1,7 +1,8 @@
 import { ReviewService } from './../review/review.service';
 import { UserRepository } from 'src/users/repositories/user.repository';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CategoryType, Prisma } from '@prisma/client';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -20,39 +21,50 @@ export class UsersService {
     return await this.userRepository.findById(id);
   }
 
-  /* 유저 아이디로 프로필 찾기 */
   async getProfile(id: string) {
     const user = await this.findById(id);
+    const countCategory = await this.getMyStats(id);
     if (!user) throw new NotFoundException();
+
     //eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...result } = user;
-    return { ...result };
+    const { password, role, updatedAt, ...result } = user;
+
+    return { user: { ...result }, categories: countCategory };
+  }
+
+  async getMyStats(userId: string) {
+    return this.reviewService.countReviewByUserCategory(userId);
   }
 
   /* 유저 아이디로 작성한 리뷰 찾기 (내용포함) (무한 스크롤) */
-  async findAllReviewByUserId(authorId: string) {
-    const reviews = await this.reviewService.findByCategory({
+  // 확인 후 변경
+  // async findReviewByUserIdAndCategory(
+  //   authorId: string,
+  //   category?: CategoryType,
+  //   cursor?: string,
+  // ) {
+  //   return await this.reviewService.findByCategory({
+  //     authorId,
+  //     category: [category || ''],
+  //     cursor,
+  //     limit: 15,
+  //   });
+  // }
+  async findReviewByUserIdAndCategory(
+    authorId: string,
+    category?: CategoryType,
+    cursor?: string,
+  ) {
+    return await this.reviewService.findReviewByUserIdAndCategory(
       authorId,
-      limit: 15,
-    });
-    const count = await this.reviewService.countReviewByUserId(authorId);
-    return {
-      reviews,
-      count,
-    };
+      category,
+      cursor,
+    );
   }
 
   async deleteRefreshToken(userId: string) {
     return await this.userRepository.deleteRefreshToken(userId);
   }
-
-  // /* 유저 아이디로 작성한 리뷰의 총 숫자 */
-  // async findAllReviewByUserId(userId: string) {
-  //   // Todo 해당 유저의 리뷰수 카운트 해주기
-  //   const data = await this.reviewService.countReviewByUserId(userId);
-  //   console.log(data);
-  //   return data;
-  // }
 
   /* 유저 생성 */
   async create(data: Prisma.UserCreateInput): Promise<{ email: string }> {
@@ -60,9 +72,8 @@ export class UsersService {
   }
 
   /* 유저 업데이트 */
-  async update(id: string, data: Prisma.UserUpdateInput) {
-    // 이미지가 있다면 이미지를 바꾸고 업데이트, 그게 아니라면 그대로 업데이트?
-    await this.userRepository.update(id, data);
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    return await this.userRepository.update(id, updateUserDto);
   }
 
   /* 리프레쉬 토큰 DB 저장 */

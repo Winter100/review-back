@@ -7,21 +7,22 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { User } from 'src/auth/types/payload';
-import { Prisma } from '@prisma/client';
+import { UserPayload } from 'src/auth/types/payload';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { MyCategoryReviewDto } from 'src/review/dto/my-category-review.dto';
 
 @Controller('users')
-// @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   /* 프로필 정보 */
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@Req() req: { user: User }) {
+  async getProfile(@Req() req: { user: UserPayload }) {
     return await this.usersService.getProfile(req.user.id);
   }
 
@@ -29,15 +30,22 @@ export class UsersController {
   @Patch('me')
   @UseGuards(JwtAuthGuard)
   async updateProfile(
-    @Req() req: { user: User },
-    @Body() updateProfileDto: Prisma.UserUpdateInput,
+    @Req() req: { user: UserPayload },
+    @Body() updateUserDto: UpdateUserDto,
   ) {
-    await this.usersService.update(req.user.id, updateProfileDto);
+    return await this.usersService.update(req.user.id, updateUserDto);
   }
 
   /* 유저가 작성한 리뷰 가져오기 */
   @Get(':id/reviews')
-  async findAllReviewByUserId(@Param('id', ParseUUIDPipe) id: string) {
-    return await this.usersService.findAllReviewByUserId(id);
+  async findAllReviewByUserId(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() myCategoryReviewDto: MyCategoryReviewDto,
+  ) {
+    return await this.usersService.findReviewByUserIdAndCategory(
+      id,
+      myCategoryReviewDto?.category,
+      myCategoryReviewDto?.cursor,
+    );
   }
 }
