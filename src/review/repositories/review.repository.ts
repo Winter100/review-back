@@ -154,47 +154,34 @@ export class ReviewRepository implements IReviewRepository {
       count: number;
     }>
   > {
-    // 카테고리별 집계: 해당 유저(authorId)의 리뷰들을 카테고리 기준으로 그룹핑하여 개수 반환
+    // 1. 모든 카테고리 정보를 먼저 가져오기
+    const allCategories = await this.prismaService.category.findMany({
+      select: { id: true, name: true, title: true, description: true },
+      orderBy: { id: 'asc' },
+    });
+
+    // 2. 해당 유저가 작성한 리뷰의 카테고리별 개수 집계
     const grouped = await this.prismaService.review.groupBy({
       by: ['categoryId'],
       where: { authorId: userId },
       _count: { _all: true },
     });
 
-    if (grouped.length === 0) return [];
-
-    // categoryId를 Category 정보와 조인하여 name/title 등을 함께 반환
-    const categoryIds = grouped.map((g) => g.categoryId);
-    const categories = await this.prismaService.category.findMany({
-      where: { id: { in: categoryIds } },
-      select: { id: true, name: true, title: true, description: true },
-    });
-
-    const categoryById = new Map(categories.map((c) => [c.id, c]));
-
-    const mapped = grouped.map((g) => {
-      const category = categoryById.get(g.categoryId);
-      if (!category) return null;
-      return {
-        categoryId: category.id,
-        categoryName: category.name,
-        categoryTitle: category.title,
-        categoryDescription: category.description,
-        count: g._count._all,
-      } as const;
-    });
-
-    return mapped.filter(
-      (
-        v,
-      ): v is {
-        categoryId: number;
-        categoryName: CategoryType;
-        categoryTitle: string;
-        categoryDescription: string;
-        count: number;
-      } => v !== null,
+    // 3. 작성된 리뷰의 카테고리별 개수를 Map으로 변환
+    const reviewCountByCategory = new Map(
+      grouped.map((g) => [g.categoryId, g._count._all]),
     );
+
+    // 4. 모든 카테고리에 대해 결과 생성 (작성하지 않은 카테고리는 count: 0)
+    const result = allCategories.map((category) => ({
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryTitle: category.title,
+      categoryDescription: category.description,
+      count: reviewCountByCategory.get(category.id) || 0,
+    }));
+
+    return result;
   }
 
   findAll(): Promise<any[]> {

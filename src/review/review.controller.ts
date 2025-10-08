@@ -6,7 +6,6 @@ import {
   Delete,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -17,6 +16,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { UserPayload } from 'src/auth/types/payload';
 import { QueryReviewDto } from './dto/query-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { FindOneParamsDto } from './dto/find-one-params.dto';
 
 @Controller('reviews')
 export class ReviewController {
@@ -38,14 +38,20 @@ export class ReviewController {
   }
 
   @Get(':id')
-  async findById(@Param('id', ParseUUIDPipe) id: string) {
-    return await this.reviewService.findById(id);
+  async findById(@Param() param: FindOneParamsDto) {
+    return await this.reviewService.findById(param.id);
   }
 
   @Get(':id/edit')
   @UseGuards(JwtAuthGuard)
-  async finyByIdEdit(@Param('id', ParseUUIDPipe) id: string) {
-    return await this.reviewService.findById(id);
+  async finyByIdEdit(
+    @Param() param: FindOneParamsDto,
+    @Req() req: { user: UserPayload },
+  ) {
+    return await this.reviewService.findEditReviewByAuthorId(
+      param.id,
+      req.user.id,
+    );
   }
 
   /* 리뷰 업데이트 */
@@ -53,19 +59,19 @@ export class ReviewController {
   @UseGuards(JwtAuthGuard)
   async updateReview(
     @Req() req: { user: UserPayload },
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param() param: FindOneParamsDto,
     @Body() updateReviewDto: UpdateReviewDto,
   ) {
-    return await this.reviewService.update(req.user, id, updateReviewDto);
+    return await this.reviewService.update(req.user, param.id, updateReviewDto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   async deleteReview(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param() param: FindOneParamsDto,
     @Req() req: { user: UserPayload },
   ) {
-    return await this.reviewService.delete(id, req.user);
+    return await this.reviewService.delete(param.id, req.user);
   }
 
   @Get('favorite')

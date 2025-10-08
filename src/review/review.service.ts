@@ -12,7 +12,8 @@ import {
 import { ReviewRepository } from './repositories/review.repository';
 import { UserPayload } from 'src/auth/types/payload';
 import { QueryReviewDto } from './dto/query-review.dto';
-import { CategoryType } from '@prisma/client';
+import { CategoryType, Prisma } from '@prisma/client';
+import { reviewWithDetailsInclude } from './types/review-repository-type';
 
 @Injectable()
 export class ReviewService {
@@ -44,6 +45,15 @@ export class ReviewService {
     if (!review) throw new NotFoundException();
 
     return review;
+  }
+
+  /**
+   * 리뷰를 수정할때 리뷰 데이터
+   * @param reviewId 리뷰 아이디
+   * @param authorId 작성자 아이디
+   */
+  async findEditReviewByAuthorId(reviewId: string, authorId: string) {
+    return await this.isReviewAuthor(reviewId, authorId);
   }
 
   /* 카테고리에 따른 리뷰 찾기 (무한스크롤) */
@@ -129,6 +139,53 @@ export class ReviewService {
   /* 유저가 작성한 총 리뷰 갯수 */
   async countReviewByUserId(userId: string) {
     return await this.reviewRepository.countReviewByUserId(userId);
+  }
+
+  async findReviewByUserIdAndCategory(
+    authorId: string,
+    category?: CategoryType,
+    cursor?: string,
+  ) {
+    const limit = 15;
+    const where: Prisma.ReviewWhereInput = {};
+
+    if (authorId) {
+      where.authorId = authorId;
+    }
+    if (category) {
+      where.category = { name: category };
+    }
+
+    const queryOptions: Prisma.ReviewFindManyArgs = {
+      where,
+      include: reviewWithDetailsInclude,
+      omit: {
+        authorId: true,
+        categoryId: true,
+      },
+      take: (limit || 15) + 1,
+      orderBy: { createdAt: 'desc' },
+    };
+
+    if (cursor) {
+      queryOptions.skip = 1;
+      queryOptions.cursor = { id: cursor };
+    }
+
+    const reviews = await this.prismaService.review.findMany(queryOptions);
+
+    const hasNextPage = reviews.length > limit;
+    const dataToSend = hasNextPage ? reviews.slice(0, limit) : reviews;
+    const nextCursor =
+      dataToSend.length > 0 ? dataToSend[dataToSend.length - 1].id : null;
+
+    return {
+      data: dataToSend,
+      meta: {
+        hasNextPage,
+        nextCursor,
+      },
+    };
   }
 
   /* 리뷰 아이디로 리뷰 검색 -> 작성자 이이디와 요청 아이디 비교 */
