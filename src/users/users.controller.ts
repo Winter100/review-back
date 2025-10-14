@@ -5,7 +5,6 @@ import {
   Controller,
   Get,
   Param,
-  ParseUUIDPipe,
   Patch,
   Query,
   Req,
@@ -14,6 +13,7 @@ import {
 import { UserPayload } from 'src/auth/types/payload';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { MyCategoryReviewDto } from 'src/review/dto/my-category-review.dto';
+import { FindOneParamsDto } from 'src/review/dto/find-one-params.dto';
 
 @Controller('users')
 export class UsersController {
@@ -39,11 +39,11 @@ export class UsersController {
   /* 유저가 작성한 리뷰 가져오기 */
   @Get(':id/reviews')
   async findAllReviewByUserId(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param() param: FindOneParamsDto,
     @Query() myCategoryReviewDto: MyCategoryReviewDto,
   ) {
     return await this.usersService.findReviewByUserIdAndCategory(
-      id,
+      param.id,
       myCategoryReviewDto?.category,
       myCategoryReviewDto?.cursor,
     );

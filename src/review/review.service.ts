@@ -1,3 +1,4 @@
+import { CommentsService } from './../comments/comments.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -21,6 +22,7 @@ export class ReviewService {
     private readonly imageService: ImageService,
     private readonly reviewRepository: ReviewRepository,
     private readonly prismaService: PrismaService,
+    private readonly commentsService: CommentsService,
   ) {}
 
   /* 리뷰 생성 */
@@ -139,6 +141,11 @@ export class ReviewService {
   /* 유저가 작성한 총 리뷰 갯수 */
   async countReviewByUserId(userId: string) {
     return await this.reviewRepository.countReviewByUserId(userId);
+  }
+
+  /* 댓글 가져 오기 */
+  async findAllCommentByReviewId(reviewId: string) {
+    return await this.commentsService.findAll(reviewId);
   }
 
   async findReviewByUserIdAndCategory(

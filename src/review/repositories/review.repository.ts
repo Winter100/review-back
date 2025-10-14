@@ -1,7 +1,6 @@
-import { ImageService } from './../../supabase/image.service';
 import { PrismaService } from './../../prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
-import { IReviewRepository } from './interface.ts/review.repository.interface';
+import { IReviewRepository } from './interface/review.repository.interface';
 import { CreateReviewDto } from '../dto/create-review.dto';
 import { UserPayload } from 'src/auth/types/payload';
 import { CategoryType, Prisma } from '@prisma/client';
@@ -11,10 +10,7 @@ import { UpdateReviewDto } from '../dto/update-review.dto';
 
 @Injectable()
 export class ReviewRepository implements IReviewRepository {
-  constructor(
-    private readonly prismaService: PrismaService,
-    private readonly imageService: ImageService,
-  ) {}
+  constructor(private readonly prismaService: PrismaService) {}
 
   async findCategoryData(category: CategoryType) {
     return await this.prismaService.category.findUnique({
@@ -81,6 +77,42 @@ export class ReviewRepository implements IReviewRepository {
       },
     });
   }
+
+  async findAllCommentByReviewId(reviewId: string) {
+    return this.prismaService.comment.findMany({
+      where: {
+        reviewId,
+        parentId: null,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            nickname: true,
+            profileImageUrl: true,
+          },
+        },
+        replies: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                nickname: true,
+                profileImageUrl: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+  }
+
   async findByCategory(query: QueryReviewDto) {
     const { q, cursor, limit, category, sort, authorId } = query;
 
@@ -251,10 +283,5 @@ export class ReviewRepository implements IReviewRepository {
       });
     });
   }
-  async delete(): Promise<void> {
-    // await this.prismaService.$transaction(async (ctx) => {
-    //   await ctx.review.delete({ where: { id } });
-    // });
-    // throw new Error('Method not implemented.');
-  }
+  async delete(): Promise<void> {}
 }

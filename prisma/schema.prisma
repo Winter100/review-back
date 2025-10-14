@@ -30,6 +30,9 @@ model User {
   // --- ---
   reviews Review[]
 
+  /// --- 댓글 ---
+  comments Comment[]
+
   @@map("users")
 }
 
@@ -75,8 +78,32 @@ model Review {
   // ---관계---
   tags Tag[]
   images ReviewImage[]
+  comments Comment[]
 
   @@map("reviews")
+}
+
+model Comment {
+  id Int @id @default(autoincrement())
+  content String @db.Text
+  createdAt DateTime @default(now())
+  deletedAt DateTime? 
+// ---작성자---
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // ---리뷰---
+  reviewId String
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  // ---자기 참조---
+  parentId Int?
+  parent Comment? @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+
+  replies Comment[] @relation("Replies")
+
+  @@index([reviewId, parentId])
+  @@map("comments")
 }
 
 model ReviewImage {
@@ -90,7 +117,6 @@ model ReviewImage {
 
   @@map("review_images")
 }
-
 
 model Tag {
   id Int @id @default(autoincrement())

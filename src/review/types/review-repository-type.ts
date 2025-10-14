@@ -19,6 +19,11 @@ export const reviewWithDetailsInclude =
         name: true,
       },
     },
+    _count: {
+      select: {
+        comments: true,
+      },
+    },
   });
 
 export type ReviewWithDetilas = Prisma.ReviewGetPayload<{

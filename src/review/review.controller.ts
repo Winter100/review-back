@@ -6,6 +6,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -74,12 +75,17 @@ export class ReviewController {
     return await this.reviewService.delete(param.id, req.user);
   }
 
-  @Get('favorite')
-  favorite() {}
-
   /* 카테고리 별 총 리뷰 갯수 */
   @Get('category/count')
   async countReviewByCategory() {
     return await this.reviewService.countReviewByCategory();
+  }
+
+  /* 댓글 가져오기 */
+  @Get(':reviewId/comments')
+  async findAllCommentByReviewId(
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+  ) {
+    return await this.reviewService.findAllCommentByReviewId(reviewId);
   }
 }
