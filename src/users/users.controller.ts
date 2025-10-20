@@ -1,26 +1,51 @@
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
-import { Body, Controller, Get, Patch, Req, UseGuards } from '@nestjs/common';
-import { User } from 'src/auth/types/payload';
-import { Prisma } from '@prisma/client';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { UserPayload } from 'src/auth/types/payload';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { MyCategoryReviewDto } from 'src/review/dto/my-category-review.dto';
+import { FindOneParamsDto } from 'src/review/dto/find-one-params.dto';
 
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @UseGuards(JwtAuthGuard)
+  /* 프로필 정보 */
   @Get('me')
-  async getProfile(@Req() req: { user: User }) {
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@Req() req: { user: UserPayload }) {
     return await this.usersService.getProfile(req.user.id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /* 프로필 업데이트 */
   @Patch('me')
-  // 프로필 업데이트
+  @UseGuards(JwtAuthGuard)
   async updateProfile(
-    @Req() req: { user: User },
-    @Body() updateProfileDto: Prisma.UserUpdateInput,
+    @Req() req: { user: UserPayload },
+    @Body() updateUserDto: UpdateUserDto,
   ) {
-    await this.usersService.update(req.user.id, updateProfileDto);
+    return await this.usersService.update(req.user.id, updateUserDto);
+  }
+
+  /* 유저가 작성한 리뷰 가져오기 */
+  @Get(':id/reviews')
+  async findAllReviewByUserId(
+    @Param() param: FindOneParamsDto,
+    @Query() myCategoryReviewDto: MyCategoryReviewDto,
+  ) {
+    return await this.usersService.findReviewByUserIdAndCategory(
+      param.id,
+      myCategoryReviewDto?.category,
+      myCategoryReviewDto?.cursor,
+    );
   }
 }

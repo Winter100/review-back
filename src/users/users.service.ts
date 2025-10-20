@@ -1,56 +1,88 @@
-import { JwtService } from '@nestjs/jwt';
-import { PasswordService } from './../auth/password.service';
-import { ImageService } from './../supabase/image.service';
+import { ReviewService } from './../review/review.service';
 import { UserRepository } from 'src/users/repositories/user.repository';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CategoryType, Prisma } from '@prisma/client';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly imageService: ImageService,
-    private readonly passwordService: PasswordService,
-    private readonly JwtService: JwtService,
+    private readonly reviewService: ReviewService,
   ) {}
 
+  /* 이메일로 유저 찾기 */
   async findByEmail(email: string) {
     return await this.userRepository.findByEmail(email);
   }
 
+  /* 유저 아이디로 유저 찾기 */
   async findById(id: string) {
     return await this.userRepository.findById(id);
   }
 
   async getProfile(id: string) {
     const user = await this.findById(id);
+    const countCategory = await this.getMyStats(id);
     if (!user) throw new NotFoundException();
+
     //eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...result } = user;
-    return { ...result };
+    const { password, role, updatedAt, ...result } = user;
+
+    return { user: { ...result }, categories: countCategory };
   }
 
+  async getMyStats(userId: string) {
+    return this.reviewService.countReviewByUserCategory(userId);
+  }
+
+  /* 유저 아이디로 작성한 리뷰 찾기 (내용포함) (무한 스크롤) */
+  // 확인 후 변경
+  // async findReviewByUserIdAndCategory(
+  //   authorId: string,
+  //   category?: CategoryType,
+  //   cursor?: string,
+  // ) {
+  //   return await this.reviewService.findByCategory({
+  //     authorId,
+  //     category: [category || ''],
+  //     cursor,
+  //     limit: 15,
+  //   });
+  // }
+  async findReviewByUserIdAndCategory(
+    authorId: string,
+    category?: CategoryType,
+    cursor?: string,
+  ) {
+    return await this.reviewService.findReviewByUserIdAndCategory(
+      authorId,
+      category,
+      cursor,
+    );
+  }
+
+  async deleteRefreshToken(userId: string) {
+    return await this.userRepository.deleteRefreshToken(userId);
+  }
+
+  /* 유저 생성 */
   async create(data: Prisma.UserCreateInput): Promise<{ email: string }> {
     return await this.userRepository.create({ ...data });
   }
 
-  async update(id: string, data: Prisma.UserUpdateInput) {
-    // 이미지가 있다면 이미지를 바꾸고 업데이트, 그게 아니라면 그대로 업데이트?
-    await this.userRepository.update(id, data);
+  /* 유저 업데이트 */
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    return await this.userRepository.update(id, updateUserDto);
   }
 
-  async uploadFile(file: Express.Multer.File, bucket: string): Promise<string> {
-    return this.imageService.uploadFile(file, bucket);
-  }
-
-  async saveRefreshToken(userId: string, refreshToken: string) {
-    const hashRefreshToken = await this.passwordService.hash(refreshToken);
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    const decode = this.JwtService.decode(refreshToken) as { exp: number };
-    const expiresAt = new Date(decode.exp * 1000);
-
-    return await this.userRepository.upsertRefreshToken(
+  /* 리프레쉬 토큰 DB 저장 */
+  async saveRefreshTokenByUserId(
+    userId: string,
+    hashRefreshToken: string,
+    expiresAt: Date,
+  ) {
+    await this.userRepository.upsertRefreshToken(
       userId,
       hashRefreshToken,
       expiresAt,

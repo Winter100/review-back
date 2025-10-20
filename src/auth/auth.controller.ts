@@ -57,6 +57,21 @@ export class AuthController {
     return this.setRefreshTokenAndRespond(req.user, res);
   }
 
+  @Post('signout')
+  @UseGuards(JwtAuthGuard)
+  async signout(
+    @Req() req: { user: UserPayload },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.signOut(req.user.id);
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: false,
+      path: '/',
+    });
+  }
+
   // 액세스 토큰 재발급
   @Get('refresh')
   @UseGuards(RefreshTokenGuard)
@@ -99,7 +114,7 @@ export class AuthController {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',
-      maxAge: ms(expiresIn || '7d'),
+      maxAge: ms(expiresIn || '1h'),
       path: '/',
     });
 

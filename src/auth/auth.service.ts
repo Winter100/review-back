@@ -1,7 +1,11 @@
 import { PasswordService } from './password.service';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from './../users/users.service';
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { SignUpDto } from './dto/signUp.dto';
 import { JwtService } from '@nestjs/jwt';
 import { JwtPayLoad, User } from './types/payload';
@@ -16,6 +20,10 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
+  /** 회원가입
+   * @param {SignUpDto} signUpDto 유저정보
+   * @returns 유저
+   */
   async signUp(signUpDto: SignUpDto) {
     const { email, password, nickname } = signUpDto;
     const user = await this.usersService.findByEmail(email);
@@ -31,6 +39,18 @@ export class AuthService {
     });
   }
 
+  async signOut(userId: string) {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) throw new NotFoundException('해당 유저를 찾을 수 없습니다.');
+
+    return await this.usersService.deleteRefreshToken(userId);
+  }
+
+  /** 액세스 토큰, 리프레쉬 토큰 발급 및 유저 얻기
+   * @param user 유저정보
+   * @returns 유저와 액세스, 리프레쉬 토큰
+   */
   async getTokens(user: User) {
     const accessTokenPayload = {
       sub: user.id,
@@ -44,6 +64,15 @@ export class AuthService {
       this.createRefreshToken(refreshTokenPayload),
     ]);
 
+    const hashedRefreshToken = await this.hashToken(refreshToken);
+    const expiresAt = this.getExpiresAt(refreshToken);
+
+    await this.usersService.saveRefreshTokenByUserId(
+      user.id,
+      hashedRefreshToken,
+      expiresAt,
+    );
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { createdAt, role, updatedAt, ...result } = user;
     const responseUser = {
@@ -52,6 +81,11 @@ export class AuthService {
     return { user: responseUser, accessToken, refreshToken };
   }
 
+  /** 이메일 및 비밀번호 검증
+   * @param email 이메일
+   * @param password 비밀번호
+   * @returns 유저 Or null
+   */
   async validateUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
     if (user && (await this.passwordService.compare(user.password, password))) {
@@ -63,10 +97,18 @@ export class AuthService {
     return null;
   }
 
+  /** 액세스 토큰 생성
+   * @param payload
+   * @returns 액세스 토큰
+   */
   async createJwtToken(payload: JwtPayLoad) {
     return this.jwtService.signAsync(payload);
   }
 
+  /** 리프레쉬 토큰 생성
+   * @param payload
+   * @returns 리프레쉬 토큰
+   */
   async createRefreshToken(payload: { email: string; sub: string }) {
     const secret = this.configService.get<string>(CONFIG_KEY.refreshTokenKey);
     const expiresIn = this.configService.get<string>(
@@ -78,8 +120,24 @@ export class AuthService {
       expiresIn,
     });
 
-    await this.usersService.saveRefreshToken(payload.sub, refreshToken);
-
     return refreshToken;
+  }
+
+  /** 토큰 암호화
+   * @param token 토큰
+   * @returns 암호화된 토큰
+   */
+  private async hashToken(token: string) {
+    return await this.passwordService.hash(token);
+  }
+
+  /** 토큰에서 만료일 추출
+   * @param token 토큰
+   * @returns {Date} 만료일
+   *  */
+  private getExpiresAt(token: string) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const decode = this.jwtService.decode(token) as { exp: number };
+    return new Date(decode.exp * 1000);
   }
 }

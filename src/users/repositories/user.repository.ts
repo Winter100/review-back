@@ -26,6 +26,16 @@ export class UserRepository implements IUserRepository {
       data,
     });
   }
+
+  async deleteRefreshToken(userId: string) {
+    return await this.prismaService.user.update({
+      where: { id: userId },
+      data: {
+        refreshToken: undefined,
+      },
+    });
+  }
+
   async upsertRefreshToken(userId: string, token: string, expiresAt: Date) {
     await this.prismaService.refreshToken.upsert({
       where: { userId: userId },
