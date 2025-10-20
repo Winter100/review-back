@@ -29,6 +29,7 @@ model User {
 
   // --- ---
   reviews Review[]
+  likes ReviewLike[]
 
   /// --- 댓글 ---
   comments Comment[]
@@ -66,6 +67,8 @@ model Review {
   location String?
   price String?
 
+  likesCount Int @default(0)
+
   categoryId Int
   category Category @relation(fields: [categoryId], references: [id])
 
@@ -79,6 +82,7 @@ model Review {
   tags Tag[]
   images ReviewImage[]
   comments Comment[]
+  likes ReviewLike[]
 
   @@map("reviews")
 }
@@ -116,6 +120,22 @@ model ReviewImage {
   review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@map("review_images")
+}
+
+model ReviewLike {
+  id String @id @default(uuid())
+
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  reviewId String
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+
+  @@unique([reviewId, userId])
+  @@map("review_likes")
 }
 
 model Tag {

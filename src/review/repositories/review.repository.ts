@@ -12,12 +12,6 @@ import { UpdateReviewDto } from '../dto/update-review.dto';
 export class ReviewRepository implements IReviewRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async findCategoryData(category: CategoryType) {
-    return await this.prismaService.category.findUnique({
-      where: { name: category },
-    });
-  }
-
   async create(user: UserPayload, categoryId: number, dto: CreateReviewDto) {
     await this.prismaService.$transaction(async (tx) => {
       const review = await tx.review.create({
@@ -62,6 +56,7 @@ export class ReviewRepository implements IReviewRepository {
       return full;
     });
   }
+
   async findById(id: string) {
     return await this.prismaService.review.findUnique({
       where: { id },
@@ -74,41 +69,6 @@ export class ReviewRepository implements IReviewRepository {
         category: { select: { name: true } },
         images: { select: { key: true, isMain: true } },
         tags: { select: { name: true } },
-      },
-    });
-  }
-
-  async findAllCommentByReviewId(reviewId: string) {
-    return this.prismaService.comment.findMany({
-      where: {
-        reviewId,
-        parentId: null,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            nickname: true,
-            profileImageUrl: true,
-          },
-        },
-        replies: {
-          include: {
-            author: {
-              select: {
-                id: true,
-                nickname: true,
-                profileImageUrl: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
       },
     });
   }
@@ -150,74 +110,6 @@ export class ReviewRepository implements IReviewRepository {
     }
 
     return await this.prismaService.review.findMany(queryOptions);
-  }
-
-  async findCategoryCount() {
-    return await this.prismaService.category.findMany({
-      select: {
-        id: true,
-        name: true,
-        title: true,
-        description: true,
-        _count: {
-          select: {
-            review: true,
-          },
-        },
-      },
-      orderBy: { id: 'asc' },
-    });
-  }
-
-  async countReviewByUserId(userId: string) {
-    return await this.prismaService.review.count({
-      where: {
-        authorId: userId,
-      },
-    });
-  }
-
-  async countUserReviewsByCategory(userId: string): Promise<
-    Array<{
-      categoryId: number;
-      categoryName: CategoryType;
-      categoryTitle: string;
-      categoryDescription: string;
-      count: number;
-    }>
-  > {
-    // 1. 모든 카테고리 정보를 먼저 가져오기
-    const allCategories = await this.prismaService.category.findMany({
-      select: { id: true, name: true, title: true, description: true },
-      orderBy: { id: 'asc' },
-    });
-
-    // 2. 해당 유저가 작성한 리뷰의 카테고리별 개수 집계
-    const grouped = await this.prismaService.review.groupBy({
-      by: ['categoryId'],
-      where: { authorId: userId },
-      _count: { _all: true },
-    });
-
-    // 3. 작성된 리뷰의 카테고리별 개수를 Map으로 변환
-    const reviewCountByCategory = new Map(
-      grouped.map((g) => [g.categoryId, g._count._all]),
-    );
-
-    // 4. 모든 카테고리에 대해 결과 생성 (작성하지 않은 카테고리는 count: 0)
-    const result = allCategories.map((category) => ({
-      categoryId: category.id,
-      categoryName: category.name,
-      categoryTitle: category.title,
-      categoryDescription: category.description,
-      count: reviewCountByCategory.get(category.id) || 0,
-    }));
-
-    return result;
-  }
-
-  findAll(): Promise<any[]> {
-    throw new Error('Method not implemented.');
   }
 
   async update(
@@ -283,5 +175,136 @@ export class ReviewRepository implements IReviewRepository {
       });
     });
   }
-  async delete(): Promise<void> {}
+
+  async getWeeklyPopularReviews() {}
+
+  async likeReview(reviewId: string, userId: string) {
+    await this.prismaService.$transaction([
+      this.prismaService.reviewLike.create({
+        data: {
+          reviewId,
+          userId,
+        },
+      }),
+      this.prismaService.review.update({
+        where: { id: reviewId },
+        data: {
+          likesCount: {
+            increment: 1,
+          },
+        },
+      }),
+    ]);
+
+    return { status: 'liked' };
+  }
+
+  async unLikeReview(reviewId: string, userId: string) {
+    await this.prismaService.$transaction([
+      this.prismaService.reviewLike.delete({
+        where: {
+          reviewId_userId: {
+            reviewId,
+            userId,
+          },
+        },
+      }),
+
+      this.prismaService.review.update({
+        where: { id: reviewId },
+        data: {
+          likesCount: {
+            decrement: 1,
+          },
+        },
+      }),
+    ]);
+
+    return { status: 'unliked' };
+  }
+
+  async findLikeReview(reviewId: string, userId: string) {
+    return await this.prismaService.reviewLike.findUnique({
+      where: {
+        reviewId_userId: {
+          reviewId,
+          userId,
+        },
+      },
+    });
+  }
+
+  async delete(reviewId: string) {
+    return await this.prismaService.$transaction([
+      this.prismaService.reviewImage.deleteMany({
+        where: { reviewId },
+      }),
+
+      this.prismaService.review.delete({
+        where: { id: reviewId },
+      }),
+    ]);
+  }
+
+  async findCategoryData(category: CategoryType) {
+    return await this.prismaService.category.findUnique({
+      where: { name: category },
+    });
+  }
+
+  async countReviewByCategory() {
+    return await this.prismaService.category.findMany({
+      select: {
+        id: true,
+        name: true,
+        title: true,
+        description: true,
+        _count: {
+          select: {
+            review: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  async countUserReviewsByCategory(userId: string): Promise<
+    Array<{
+      categoryId: number;
+      categoryName: CategoryType;
+      categoryTitle: string;
+      categoryDescription: string;
+      count: number;
+    }>
+  > {
+    // 1. 모든 카테고리 정보를 먼저 가져오기
+    const allCategories = await this.prismaService.category.findMany({
+      select: { id: true, name: true, title: true, description: true },
+      orderBy: { id: 'asc' },
+    });
+
+    // 2. 해당 유저가 작성한 리뷰의 카테고리별 개수 집계
+    const grouped = await this.prismaService.review.groupBy({
+      by: ['categoryId'],
+      where: { authorId: userId },
+      _count: { _all: true },
+    });
+
+    // 3. 작성된 리뷰의 카테고리별 개수를 Map으로 변환
+    const reviewCountByCategory = new Map(
+      grouped.map((g) => [g.categoryId, g._count._all]),
+    );
+
+    // 4. 모든 카테고리에 대해 결과 생성 (작성하지 않은 카테고리는 count: 0)
+    const result = allCategories.map((category) => ({
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryTitle: category.title,
+      categoryDescription: category.description,
+      count: reviewCountByCategory.get(category.id) || 0,
+    }));
+
+    return result;
+  }
 }

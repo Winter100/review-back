@@ -44,7 +44,7 @@ export class ReviewService {
   async findById(id: string) {
     const review = await this.reviewRepository.findById(id);
 
-    if (!review) throw new NotFoundException();
+    if (!review) throw new NotFoundException(`${id}가 존재하지 않습니다.`);
 
     return review;
   }
@@ -105,25 +105,40 @@ export class ReviewService {
     const review = await this.isReviewAuthor(reviewId, user.id);
 
     try {
-      await this.prismaService.$transaction([
-        this.prismaService.review.delete({ where: { id: reviewId } }),
-      ]);
+      await this.reviewRepository.delete(reviewId);
+    } catch {
+      throw new InternalServerErrorException(
+        '리뷰 삭제 중 오류가 발생했습니다.',
+      );
+    }
 
-      if (review.images.length >= 1) {
+    try {
+      if (review.images && review.images.length >= 1) {
         const imageKeys = review.images.map((image) => image.key);
         await this.imageService.deleteImage(imageKeys);
       }
 
       return { message: `${reviewId}가 삭제가 완료되었습니다` };
-    } catch {
-      throw new InternalServerErrorException();
+    } catch (e) {
+      console.error(`${reviewId} 스토리지 제거 중 에러 - ${e}`);
+      throw new InternalServerErrorException(
+        `${reviewId} 이미지 스토리지 삭제 중 오류가 발생했습니다.`,
+      );
     }
   }
 
   /* 카테고리 별 총 리뷰 갯수 */
   async countReviewByCategory() {
-    return await this.reviewRepository.findCategoryCount();
+    return await this.reviewRepository.countReviewByCategory();
   }
+
+  /** 이번주 인기 리뷰 조회 - Todo
+   *
+   * - "좋아요" 순으로 3개
+   * - 레디스 또는 인 메모리 캐싱
+   * - 일주일? 기간 설정해서 조회 해주기.
+   */
+  async getWeeklyPopularReviews() {}
 
   /* 유저가 작성한 리뷰를 카테고리별로 집계 */
   async countReviewByUserCategory(userId: string): Promise<
@@ -138,16 +153,37 @@ export class ReviewService {
     return await this.reviewRepository.countUserReviewsByCategory(userId);
   }
 
-  /* 유저가 작성한 총 리뷰 갯수 */
-  async countReviewByUserId(userId: string) {
-    return await this.reviewRepository.countReviewByUserId(userId);
-  }
-
-  /* 댓글 가져 오기 */
+  /* 리뷰에 작성된 댓글 가져오기 */
   async findAllCommentByReviewId(reviewId: string) {
     return await this.commentsService.findAll(reviewId);
   }
 
+  /* 리뷰 좋아요 토글 */
+  async toggleReviewLike(reviewId: string, userId: string) {
+    const review = await this.findById(reviewId);
+    if (!review) throw new NotFoundException('리뷰를 찾을 수 없습니다');
+
+    const existingLike = await this.reviewRepository.findLikeReview(
+      reviewId,
+      userId,
+    );
+
+    if (existingLike) {
+      return this.reviewRepository.unLikeReview(reviewId, userId);
+    } else {
+      return this.reviewRepository.likeReview(reviewId, userId);
+    }
+  }
+
+  async findLikeReview(reviewId: string, userId: string) {
+    const review = await this.findById(reviewId);
+    if (!review) throw new NotFoundException('리뷰를 찾을 수 없습니다');
+
+    const liked = await this.reviewRepository.findLikeReview(reviewId, userId);
+    return { liked: !!liked };
+  }
+
+  /* 유저가 작성한 리뷰중 카테고리를 기준으로 데이터 가져오기 */
   async findReviewByUserIdAndCategory(
     authorId: string,
     category?: CategoryType,
@@ -195,7 +231,7 @@ export class ReviewService {
     };
   }
 
-  /* 리뷰 아이디로 리뷰 검색 -> 작성자 이이디와 요청 아이디 비교 */
+  /* 리뷰 아이디로 리뷰 검색 -> 작성자 아이디와 요청 아이디 비교 */
   private async isReviewAuthor(reviewId: string, id: string) {
     const review = await this.findById(reviewId);
     const isAuthor = review.author.id === id;
